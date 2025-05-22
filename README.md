@@ -25,7 +25,7 @@ if (strcmp(path, "/image") == 0) {
     }
 ```
 B. Saat file gambar virtual dibuka , konversi file .txt ke gambar .png dilakukan secara otomatis.
-```
+```cpp
 if (strncmp(path, "/image/", 7) == 0) {
     ...
     char *image_path = generate_image_from_hex(txt_filename);
@@ -35,7 +35,7 @@ if (strncmp(path, "/image/", 7) == 0) {
 }
 ```
 C. Tiap kali konversi file .txt ke .png berhasil, catat log ke file conversion.log yang berisi: timestamp, nama file .txt, dan nama file .png.
-```
+```cpp
 FILE *log_fp = fopen(log_path, "a");
 if (log_fp) {
     fprintf(log_fp, "[%04d-%02d-%02d][%02d:%02d:%02d]: Successfully converted %s to %s\n", ...);
@@ -43,7 +43,7 @@ if (log_fp) {
 }
 ```
 D. Jika file .png yang dihasilkan dari konversi sudah ada, maka tidak perlu mengkonversi ulang. Gunakan file yang sudah ada.
-```
+```cpp
 if (access(output_image_path, F_OK) == 0) {
     free(image_data);
     return output_image_path;
