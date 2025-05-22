@@ -49,6 +49,12 @@ if (access(output_image_path, F_OK) == 0) {
     return output_image_path;
 }
 ```
+## HASIL OUTPUT ##
+Struktur Akhir Directory 
+![image](https://github.com/user-attachments/assets/311eea9c-b62d-47af-bae4-9d2aabdfebde)
+
+Membaca Conversion.log
+![image](https://github.com/user-attachments/assets/e43eac32-7ec2-4122-97af-5ccd54a216c6)
 ## Soal_2
 ## Soal_3
 ## Soal_4
