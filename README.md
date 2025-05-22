@@ -24,7 +24,7 @@ if (strcmp(path, "/image") == 0) {
         }
     }
 ```
-B. Saat file gambar virtual dibuka (misalnya dengan cat atau open), konversi file .txt ke gambar .png dilakukan secara otomatis.
+B. Saat file gambar virtual dibuka , konversi file .txt ke gambar .png dilakukan secara otomatis.
 ```
 if (strncmp(path, "/image/", 7) == 0) {
     ...
