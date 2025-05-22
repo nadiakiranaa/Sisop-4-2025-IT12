@@ -15,7 +15,7 @@
 A. Buatlah virtual folder image/ dalam direktori mount yang berisi file gambar hasil konversi dari file .txt dalam folder anomali. Nama file virtual akan diberi format: <nama_file>_image_<timestamp>.png.
 ```
 if (strcmp(path, "/image") == 0) {
-    ...
+    ...cpp
     while ((entry = readdir(dir)) != NULL) {
         if (strstr(entry->d_name, ".txt")) {
             ...
