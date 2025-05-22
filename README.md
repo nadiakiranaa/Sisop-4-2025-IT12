@@ -50,7 +50,9 @@ if (access(output_image_path, F_OK) == 0) {
 }
 ```
 ## HASIL OUTPUT ##
+
 Struktur Akhir Directory 
+
 ![image](https://github.com/user-attachments/assets/311eea9c-b62d-47af-bae4-9d2aabdfebde)
 
 Membaca Conversion.log
