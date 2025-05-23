@@ -58,6 +58,238 @@ Struktur Akhir Directory
 Membaca Conversion.log
 ![image](https://github.com/user-attachments/assets/e43eac32-7ec2-4122-97af-5ccd54a216c6)
 ## Soal_2
+I. Deskripsi Masalah dan Tujuan
+
+Seorang ilmuwan menemukan pecahan data dari robot legendaris Baymax, tersimpan dalam direktori relics/ sebagai 14 potongan file berukuran 1KB dengan format Baymax.jpeg.000 hingga Baymax.jpeg.013. Tujuan sistem ini adalah membangkitkan file Baymax.jpeg secara utuh melalui mount point virtual (mount_dir) menggunakan FUSE, tanpa menyatukan file secara permanen.
+
+Sistem harus dapat:
+- Menampilkan file utuh Baymax.jpeg dari pecahan-pecahan
+- Memecah file baru menjadi potongan 1KB saat ditulis
+- Menghapus semua pecahan saat file dihapus
+- Mencatat aktivitas (read, write, delete, copy) ke dalam activity.log
+
+
+
+### Struktur Direktori yang Digunakan
+├── mount_dir         # Mount point FUSE
+├── relics            # Folder tempat menyimpan pecahan file
+│   ├── Baymax.jpeg.000
+│   ├── Baymax.jpeg.001
+│   ├── ...
+│   └── Baymax.jpeg.013
+└── activity.log      # Catatan aktivitas pengguna
+
+### Cara Kompilasi dan Menjalankan
+Kompilasi:
+```
+gcc virtual_fs.c `pkg-config fuse --cflags --libs` -o virtual_fs
+```
+Menjalankan Filesystem:
+```
+./virtual_fs mount_dir
+```
+
+### 1. Menyatukan Pecahan Menjadi Satu File Virtual (Baymax.jpeg)
+```
+static int fs_getattr(const char* path, struct stat* st) {
+    memset(st, 0, sizeof(struct stat));
+    if (strcmp(path + 1, virtual_file) == 0) {
+        st->st_mode = S_IFREG | 0444;
+        st->st_nlink = 1;
+        size_t total = 0;
+        for (int i = 0; i < 14; i++) {
+            char chunk_path[256];
+            sprintf(chunk_path, "%s/%s.%03d", RELIC_DIR, virtual_file, i);
+            FILE* f = fopen(chunk_path, "rb");
+            if (f) {
+                fseek(f, 0, SEEK_END);
+                total += ftell(f);
+                fclose(f);
+            }
+        }
+        st->st_size = total;
+        return 0;
+    }
+    return -ENOENT;
+}
+```
+```
+static int fs_read(const char* path, char* buf, size_t size, off_t offset, struct fuse_file_info* fi) {
+    if (strcmp(path + 1, virtual_file) != 0)
+        return -ENOENT;
+
+    write_log("READ", virtual_file);
+    size_t bytes_read = 0;
+    size_t cur_offset = 0;
+    for (int i = 0; i < 14; i++) {
+        char chunk_path[256];
+        sprintf(chunk_path, "%s/%s.%03d", RELIC_DIR, virtual_file, i);
+        FILE* f = fopen(chunk_path, "rb");
+        if (!f) continue;
+
+        fseek(f, 0, SEEK_END);
+        size_t len = ftell(f);
+        fseek(f, 0, SEEK_SET);
+
+        if (offset < cur_offset + len) {
+            size_t skip = offset > cur_offset ? offset - cur_offset : 0;
+            fseek(f, skip, SEEK_CUR);
+            size_t to_read = len - skip;
+            if (bytes_read + to_read > size)
+                to_read = size - bytes_read;
+            fread(buf + bytes_read, 1, to_read, f);
+            bytes_read += to_read;
+        }
+        cur_offset += len;
+        fclose(f);
+        if (bytes_read >= size) break;
+    }
+    return bytes_read;
+}
+```
+### 2. Memecah File Baru saat Ditulis
+```
+static int fs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
+    (void) offset;
+    (void) fi;
+    char name[256];
+    sscanf(path, "/%[^\n]", name);
+
+    int part = 0;
+    while (1) {
+        char old_chunk[512];
+        snprintf(old_chunk, sizeof(old_chunk), "%s/%s.%03d", SOURCE_DIR, name, part);
+        if (access(old_chunk, F_OK) != 0)
+            break;
+        remove(old_chunk);
+        part++;
+    }
+
+    part = 0;
+    size_t written = 0;
+
+    while (written < size) {
+        char chunk_path[512];
+        snprintf(chunk_path, sizeof(chunk_path), "%s/%s.%03d", SOURCE_DIR, name, part);
+        FILE *fp = fopen(chunk_path, "wb");
+        if (!fp) break;
+
+        size_t to_write = CHUNK_SIZE;
+        if (size - written < CHUNK_SIZE)
+            to_write = size - written;
+
+        fwrite(buf + written, 1, to_write, fp);
+        fclose(fp);
+
+        written += to_write;
+        part++;
+    }
+
+    char safe_name[MAX_NAME_LOG + 1];
+    strncpy(safe_name, name, MAX_NAME_LOG);
+    safe_name[MAX_NAME_LOG] = '\0';
+
+    char chunks_written[512] = {0};
+    if (part == 1) {
+        snprintf(chunks_written, sizeof(chunks_written), "%s.000", safe_name);
+    } else {
+        snprintf(chunks_written, sizeof(chunks_written), "%s.000 to %s.%03d", safe_name, safe_name, part - 1);
+    }
+
+    write_log("WRITE: %s -> %s", safe_name, chunks_written);
+
+    return size;
+}
+```
+### 3. Menghapus Semua Pecahan File
+```
+static int fs_unlink(const char *path) {
+    char name[256];
+    sscanf(path, "/%[^\n]", name);
+
+    int i = 0;
+    while (1) {
+        char chunk_path[512];
+        snprintf(chunk_path, sizeof(chunk_path), "%s/%s.%03d", SOURCE_DIR, name, i);
+        if (access(chunk_path, F_OK) != 0) break;
+        remove(chunk_path);
+        i++;
+    }
+
+    if (i > 0) {
+        write_log("DELETE: %s.000 - %s.%03d", name, name, i - 1);
+    } else {
+        write_log("DELETE: %s (no chunks found)", name);
+    }
+
+    return 0;
+}
+```
+### 4. Mencatat Aktivitas Pengguna
+```
+static void write_log(const char *format, ...) {
+    FILE *log = fopen(LOG_FILE, "a");
+    if (!log) {
+        perror("Failed to open log file");
+        return;
+    }
+
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    char time_buf[64];
+    strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", t);
+
+    fprintf(log, "[%s] ", time_buf);
+
+    va_list args;
+    va_start(args, format);
+    vfprintf(log, format, args);
+    va_end(args);
+
+    fprintf(log, "\n");
+    fclose(log);
+}
+```
+### 5. Menampilkan Baymax.jpeg 
+```
+static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
+    (void) offset;
+    (void) fi;
+
+    filler(buf, ".", NULL, 0);
+    filler(buf, "..", NULL, 0);
+
+    DIR *dp = opendir(SOURCE_DIR);
+    if (!dp) return -errno;
+
+    struct dirent *de;
+    char listed[256][256];
+    int listed_count = 0;
+
+    while ((de = readdir(dp)) != NULL) {
+        if (strstr(de->d_name, ".000")) {
+            char base[256];
+            strncpy(base, de->d_name, strlen(de->d_name) - 4);
+            base[strlen(de->d_name) - 4] = '\0';
+
+            int already_listed = 0;
+            for (int i = 0; i < listed_count; ++i) {
+                if (strcmp(listed[i], base) == 0) {
+                    already_listed = 1;
+                    break;
+                }
+            }
+            if (!already_listed) {
+                filler(buf, base, NULL, 0);
+                strcpy(listed[listed_count++], base);
+            }
+        }
+    }
+
+    closedir(dp);
+    return 0;
+}
+```
 ## Soal_3
 ## Soal_4
 ![image](https://github.com/user-attachments/assets/24d23dca-c8d9-49a9-a728-0d51ca7e7a19)
