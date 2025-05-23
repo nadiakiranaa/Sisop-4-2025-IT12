@@ -60,3 +60,248 @@ Membaca Conversion.log
 ## Soal_2
 ## Soal_3
 ## Soal_4
+![image](https://github.com/user-attachments/assets/24d23dca-c8d9-49a9-a728-0d51ca7e7a19)
+Pertama kita buat struktur direktori    
+chiho/    
+├── blackrose/       
+├── dragon/    
+├── heaven/       
+├── metro/    
+├── starter/    
+└── youth/    
+fuse_dir/    
+
+Beberapa fungsi dibutuhkan untuk menjalankan soal ini, antara lain adalah `getattr`: Mendapatkan metadata file. `readdir`: Membaca isi direktori. `read`: Membaca isi file dari chiho. `write`: Menyimpan isi file ke chiho. `create`: Membuat file baru di area chiho sesuai aturan. `unlink`: Menghapus file (juga perlu menghapus transformasi jika ada).    
+# build_real_path()
+```
+void build_real_path(const char *path, char *real_path) {
+    if (is_starter_path(path)) snprintf(real_path, 1024, "%s%s.mai", chiho_root, path);
+    else if (is_metro_path(path)) snprintf(real_path, 1024, "%s%s.ccc", chiho_root, path);
+    else if (is_dragon_path(path)) snprintf(real_path, 1024, "%s%s.rot", chiho_root, path);
+    else if (is_blackrose_path(path)) snprintf(real_path, 1024, "%s%s.bin", chiho_root, path);
+    else if (is_heaven_path(path)) snprintf(real_path, 1024, "%s%s.enc", chiho_root, path);
+    else if (is_youth_path(path)) snprintf(real_path, 1024, "%s%s.gz", chiho_root, path);
+    else snprintf(real_path, 1024, "%s%s", chiho_root, path);
+}
+```
+# define RESOLVE_PATH
+Makro ini digunakan untuk Menangani redirect khusus pada area 7sref/. Menyederhanakan semua fungsi yang bekerja dengan path, supaya tidak perlu menulis kode redirect berulang-ulang. Menyediakan variabel path_in yang sudah siap digunakan, baik untuk path normal maupun path hasil redirect.
+```
+#define RESOLVE_PATH \
+    const char *path_in = path; \
+    char resolved_path[1024]; \
+    if (is_7sref_path(path)) { \
+        redirect_7sref_path(path, resolved_path); \
+        path_in = resolved_path; \
+    }
+```
+# maimai_readdir
+Tugas utama dari funsi ini adlah Membaca isi direktori asli (chiho_root/...). Menyesuaikan nama file yang ditampilkan ke user sesuai aturan per chiho (misal: menghapus ekstensi .mai, .ccc, .rot, dst). Menyediakan nama file ke filler() untuk diteruskan ke user.
+```
+static int maimai_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
+                          off_t offset, struct fuse_file_info *fi,
+                          enum fuse_readdir_flags flags) {
+    RESOLVE_PATH
+
+    if (is_7sref_path(path_in)) {
+        struct {
+            const char *chiho;
+            const char *ext;
+        } mapping[] = {
+            { "starter", ".mai" },
+            { "metro", ".ccc" },
+            { "dragon", ".rot" },
+            { "blackrose", ".bin" },
+            { "heaven", ".enc" },
+            { "youth", ".gz" },
+        };
+        for (int i = 0; i < 6; ++i) {
+            char chiho_path[1024];
+            snprintf(chiho_path, sizeof(chiho_path), "%s/%s", chiho_root, mapping[i].chiho);
+            DIR *dp = opendir(chiho_path);
+            if (!dp) continue;
+            struct dirent *de;
+            while ((de = readdir(dp)) != NULL) {
+                if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..")) continue;
+                if (strstr(de->d_name, mapping[i].ext)) {
+                    char noext[256];
+                    strncpy(noext, de->d_name, strlen(de->d_name) - strlen(mapping[i].ext));
+                    noext[strlen(de->d_name) - strlen(mapping[i].ext)] = '\0';
+
+                    char fake_name[512];
+                    snprintf(fake_name, sizeof(fake_name), "%s_%s", mapping[i].chiho, noext);
+                    filler(buf, fake_name, NULL, 0, 0);
+                }
+            }
+            closedir(dp);
+        }
+        return 0;
+    }
+
+    char real_path[1024];
+    snprintf(real_path, sizeof(real_path), "%s%s", chiho_root, path_in);
+    DIR *dp = opendir(real_path);
+    if (!dp) return -errno;
+
+    struct dirent *de;
+    while ((de = readdir(dp)) != NULL) {
+        if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..")) continue;
+
+        if (is_starter_path(path_in) && strstr(de->d_name, ".mai")) {
+            char noext[256];
+            strncpy(noext, de->d_name, strlen(de->d_name) - 4);
+            noext[strlen(de->d_name) - 4] = '\0';
+            filler(buf, noext, NULL, 0, 0);
+            continue;
+        } else if (is_metro_path(path_in) && strstr(de->d_name, ".ccc")) {
+            char noext[256];
+            strncpy(noext, de->d_name, strlen(de->d_name) - 4);
+            noext[strlen(de->d_name) - 4] = '\0';
+            filler(buf, noext, NULL, 0, 0);
+	    continue;
+        } else if (is_dragon_path(path_in) && strstr(de->d_name, ".rot")) {
+            char noext[256];
+            strncpy(noext, de->d_name, strlen(de->d_name) - 4);
+            noext[strlen(de->d_name) - 4] = '\0';
+            filler(buf, noext, NULL, 0, 0);
+	    continue;
+	} else if (is_blackrose_path(path_in) && strstr(de->d_name, ".bin")) {
+            char noext[256];
+            strncpy(noext, de->d_name, strlen(de->d_name) - 4);
+            noext[strlen(de->d_name) - 4] = '\0';
+            filler(buf, noext, NULL, 0, 0);
+	    continue;
+	} else if (is_heaven_path(path_in) && strstr(de->d_name, ".enc")) {
+            char noext[256];
+            strncpy(noext, de->d_name, strlen(de->d_name) - 4);
+            noext[strlen(de->d_name) - 4] = '\0';
+            filler(buf, noext, NULL, 0, 0);
+	    continue;
+	} else if (is_youth_path(path_in) && strstr(de->d_name, ".gz")) {
+            char noext[256];
+            strncpy(noext, de->d_name, strlen(de->d_name) - 4);
+            noext[strlen(de->d_name) - 4] = '\0';
+            filler(buf, noext, NULL, 0, 0);
+	    continue;
+        } else {
+            filler(buf, de->d_name, NULL, 0, 0);
+        }
+    }
+    closedir(dp);
+    return 0;
+}
+```
+# maimai_open
+Mengecek apakah file benar-benar ada di chiho_root, sesuai dengan path yang diberikan (dan transformasi yang berlaku). Jika file tidak ada → kembalikan error. Jika ada → langsung tutup lagi (karena FUSE akan membukanya ulang secara internal).
+```
+static int maimai_open(const char *path, struct fuse_file_info *fi) {
+    RESOLVE_PATH
+    char real_path[1024];
+    build_real_path(path_in, real_path);
+    int fd = open(real_path, fi->flags);
+    if (fd == -1) return -errno;
+    close(fd);
+    return 0;
+}
+```
+# maimai_write
+Tugas fungsi ini adalah Mengubah path menjadi path asli di disk (real_path). Memproses konten (buf) sesuai chiho:    
+Heaven → AES-256 encrypt    
+Youth → gzip compress    
+Metro → custom shift encode    
+Dragon → ROT13    
+Lalu, Menyimpan hasilnya ke disk.
+```
+static int maimai_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
+    RESOLVE_PATH
+    char real_path[1024];
+    build_real_path(path_in, real_path);
+
+    if (is_heaven_path(path_in)) {
+        char tmp[] = "/tmp/plainXXXXXX";
+        int tmpfd = mkstemp(tmp);
+        if (tmpfd == -1) return -errno;
+        write(tmpfd, buf, size);
+        close(tmpfd);
+        char cmd[2048];
+        snprintf(cmd, sizeof(cmd), "openssl enc -aes-256-cbc -salt -in '%s' -out '%s' -pass pass:%s 2>/dev/null", tmp, real_path, SECRET_KEY);
+        system(cmd);
+        unlink(tmp);
+        return size;
+    }
+
+    if (is_youth_path(path_in)) {
+        if (is_youth_path(path_in)) {
+    gzFile gz = gzopen(real_path, "wb");
+    if (!gz) return -errno;
+    int written = gzwrite(gz, buf, size);
+    gzclose(gz);
+    return (written == 0) ? -EIO : size;
+}
+
+    }
+
+    char dir_path[1024];
+    strcpy(dir_path, real_path);
+    char *last_slash = strrchr(dir_path, '/');
+    if (last_slash) {
+        *last_slash = '\0';
+        mkdir(dir_path, 0755);
+    }
+
+    int fd = open(real_path, O_WRONLY | O_CREAT, 0644);
+    if (fd == -1) return -errno;
+    char *temp = malloc(size);
+    memcpy(temp, buf, size);
+    if (is_metro_path(path_in)) shift_content_encode(temp, size);
+    if (is_dragon_path(path_in)) rot13(temp, size);
+    int res = pwrite(fd, temp, size, offset);
+    if (res == -1) res = -errno;
+    free(temp); close(fd);
+    return res;
+}
+```
+# maimai_create()
+Membuat file baru di filesystem virtual maimai_fs, saat user menjalankan perintah seperti `touch /fuse_dir/starter/newfile.txt`
+```
+static int maimai_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
+    RESOLVE_PATH
+    char real_path[1024];
+    build_real_path(path_in, real_path);
+
+    char dir_path[1024];
+    strcpy(dir_path, real_path);
+    char *last_slash = strrchr(dir_path, '/');
+    if (last_slash) {
+        *last_slash = '\0';
+        mkdir_recursive(dir_path);
+    }
+    int fd = creat(real_path, mode);
+    if (fd == -1) return -errno;
+    close(fd);
+    return 0;
+}
+```
+# maimai_unlink()
+Menghapus (unlink) file dari chiho yang sesuai. Dijalankan saat user menggunakan `rm /fuse_dir/heaven/secret.txt`
+```
+static int maimai_unlink(const char *path) {
+    RESOLVE_PATH
+    char real_path[1024];
+    build_real_path(path_in, real_path);
+    int res = unlink(real_path);
+    return (res == -1) ? -errno : 0;
+}
+```
+# Fuse Operations
+```
+static struct fuse_operations maimai_oper = {
+    .getattr = maimai_getattr,
+    .readdir = maimai_readdir,
+    .open    = maimai_open,
+    .read    = maimai_read, 
+    .write   = maimai_write,
+    .create  = maimai_create,
+    .unlink  = maimai_unlink,
+};
+```
